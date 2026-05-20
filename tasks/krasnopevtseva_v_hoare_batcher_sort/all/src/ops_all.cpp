@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <ranges>
 #include <stack>
 #include <utility>
 #include <vector>
@@ -216,7 +217,7 @@ bool KrasnopevtsevaVHoareBatcherSortALL::RunImpl() {
               MPI_COMM_WORLD);
 
   if (rank == 0) {
-    std::sort(global_data.begin(), global_data.end());
+    std::ranges::sort(global_data);
     GetOutput() = std::move(global_data);
   }
 
