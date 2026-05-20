@@ -5,10 +5,10 @@
 #include <random>
 #include <vector>
 
+#include "krasnopevtseva_v_hoare_batcher_sort/all/include/ops_all.hpp"
 #include "krasnopevtseva_v_hoare_batcher_sort/common/include/common.hpp"
 #include "krasnopevtseva_v_hoare_batcher_sort/omp/include/ops_omp.hpp"
 #include "krasnopevtseva_v_hoare_batcher_sort/seq/include/ops_seq.hpp"
-#include "krasnopevtseva_v_hoare_batcher_sort/stl/include/ops_stl.hpp"
 #include "util/include/perf_test_util.hpp"
 
 namespace krasnopevtseva_v_hoare_batcher_sort {
@@ -52,7 +52,7 @@ namespace {
 
 const auto kAllPerfTasks =
     ppc::util::MakeAllPerfTasks<InType, KrasnopevtsevaVHoareBatcherSortSEQ, KrasnopevtsevaVHoareBatcherSortOMP,
-                                KrasnopevtsevaVHoareBatcherSortSTL>(PPC_SETTINGS_krasnopevtseva_v_hoare_batcher_sort);
+                                KrasnopevtsevaVHoareBatcherSortALL>(PPC_SETTINGS_krasnopevtseva_v_hoare_batcher_sort);
 
 const auto kGtestValues = ppc::util::TupleToGTestValues(kAllPerfTasks);
 
