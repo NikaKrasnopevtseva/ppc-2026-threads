@@ -160,23 +160,17 @@ void KrasnopevtsevaVHoareBatcherSortALL::SortLocalData(std::vector<int> &data) {
   int numthreads = omp_get_max_threads();
   numthreads = std::min(n, numthreads);
 
-  if (n < 10000) {
+  if (n < 1000) {
     QuickSort(data, 0, n - 1);
   } else {
     ParallelSortChunksOpenMP(data, n, numthreads);
   }
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 bool KrasnopevtsevaVHoareBatcherSortALL::RunImpl() {
   int rank = 0;
   int proc_size = 1;
-  int initialized = 0;
-
-  MPI_Initialized(&initialized);
-
-  if (!initialized) {
-    MPI_Init(nullptr, nullptr);
-  }
 
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &proc_size);
@@ -184,14 +178,10 @@ bool KrasnopevtsevaVHoareBatcherSortALL::RunImpl() {
   const auto &input = GetInput();
   int n = static_cast<int>(input.size());
 
-  if (n <= 1) {
-    if (rank == 0) {
-      GetOutput().resize(input.size());
-      std::copy(input.begin(), input.end(), GetOutput().begin());
-    }
-    if (!initialized) {
-      MPI_Finalize();
-    }
+  if (proc_size == 1 || n <= 1000) {
+    std::vector<int> result = input;
+    SortLocalData(result);
+    GetOutput() = std::move(result);
     return true;
   }
 
@@ -218,6 +208,7 @@ bool KrasnopevtsevaVHoareBatcherSortALL::RunImpl() {
 
   SortLocalData(local_data);
 
+  // Сбор данных
   std::vector<int> global_data;
   if (rank == 0) {
     global_data.resize(static_cast<size_t>(n));
@@ -227,53 +218,8 @@ bool KrasnopevtsevaVHoareBatcherSortALL::RunImpl() {
               MPI_COMM_WORLD);
 
   if (rank == 0) {
-    std::vector<std::vector<int>> parts;
-    parts.reserve(static_cast<size_t>(proc_size));
-
-    for (int i = 0; i < proc_size; ++i) {
-      int cnt = send_counts[i];
-      int start = displs[i];
-      if (cnt > 0 && start + cnt <= n) {
-        parts.emplace_back(global_data.begin() + start, global_data.begin() + start + cnt);
-      }
-    }
-
-    if (!parts.empty()) {
-      std::vector<int> result = std::move(parts[0]);
-      for (size_t i = 1; i < parts.size(); ++i) {
-        std::vector<int> merged;
-        merged.reserve(result.size() + parts[i].size());
-
-        size_t i1 = 0;
-        size_t i2 = 0;
-        while (i1 < result.size() && i2 < parts[i].size()) {
-          if (result[i1] <= parts[i][i2]) {
-            merged.push_back(result[i1]);
-            ++i1;
-          } else {
-            merged.push_back(parts[i][i2]);
-            ++i2;
-          }
-        }
-        while (i1 < result.size()) {
-          merged.push_back(result[i1]);
-          ++i1;
-        }
-        while (i2 < parts[i].size()) {
-          merged.push_back(parts[i][i2]);
-          ++i2;
-        }
-        result = std::move(merged);
-      }
-      global_data = std::move(result);
-    }
-
-    GetOutput().resize(global_data.size());
-    std::copy(global_data.begin(), global_data.end(), GetOutput().begin());
-  }
-
-  if (!initialized) {
-    MPI_Finalize();
+    std::sort(global_data.begin(), global_data.end());
+    GetOutput() = std::move(global_data);
   }
 
   return true;
