@@ -167,7 +167,6 @@ void KrasnopevtsevaVHoareBatcherSortALL::SortLocalData(std::vector<int> &data) {
   }
 }
 
-// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 bool KrasnopevtsevaVHoareBatcherSortALL::RunImpl() {
   int rank = 0;
   int proc_size = 1;
@@ -178,15 +177,13 @@ bool KrasnopevtsevaVHoareBatcherSortALL::RunImpl() {
   const auto &input = GetInput();
   int n = static_cast<int>(input.size());
 
-  // Для одного процесса или маленького массива - просто сортируем
-  if (proc_size == 1 || n <= 10000) {
+  if (proc_size == 1 || n <= 1000) {
     std::vector<int> result = input;
     SortLocalData(result);
     GetOutput() = std::move(result);
     return true;
   }
 
-  // Распределение данных
   int local_n = n / proc_size;
   int remainder = n % proc_size;
   std::vector<int> send_counts(proc_size);
@@ -200,7 +197,6 @@ bool KrasnopevtsevaVHoareBatcherSortALL::RunImpl() {
   int my_n = send_counts[rank];
   std::vector<int> local_data(my_n);
 
-  // Scatter - все процессы вызывают с одинаковыми параметрами
   std::vector<int> temp_input;
   if (rank == 0) {
     temp_input = input;
@@ -211,18 +207,15 @@ bool KrasnopevtsevaVHoareBatcherSortALL::RunImpl() {
   MPI_Scatterv(temp_input.data(), send_counts.data(), displs.data(), MPI_INT, local_data.data(), my_n, MPI_INT, 0,
                MPI_COMM_WORLD);
 
-  // Сортировка
   SortLocalData(local_data);
 
-  // Gather - все процессы выделяют память под global_data
   std::vector<int> global_data(n);
 
   MPI_Gatherv(local_data.data(), my_n, MPI_INT, global_data.data(), send_counts.data(), displs.data(), MPI_INT, 0,
               MPI_COMM_WORLD);
 
-  // Финальное слияние на процессе 0
   if (rank == 0) {
-    std::sort(global_data.begin(), global_data.end());
+    std::ranges::sort(global_data);
     GetOutput() = std::move(global_data);
   }
 
