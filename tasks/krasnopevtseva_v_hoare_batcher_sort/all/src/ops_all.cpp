@@ -6,7 +6,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
-#include <ranges>
 #include <stack>
 #include <utility>
 #include <vector>
