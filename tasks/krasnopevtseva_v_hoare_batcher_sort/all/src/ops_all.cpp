@@ -169,82 +169,17 @@ void KrasnopevtsevaVHoareBatcherSortALL::SortLocalData(std::vector<int> &data) {
 
 bool KrasnopevtsevaVHoareBatcherSortALL::RunImpl() {
   int rank = 0;
-  int proc_size = 1;
 
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &proc_size);
 
   const auto &input = GetInput();
-  int n = static_cast<int>(input.size());
 
-  if (proc_size == 1 || n <= 10000) {
-    std::vector<int> result = input;
-    SortLocalData(result);
-    if (rank == 0) {
-      GetOutput() = std::move(result);
-    }
-    return true;
-  }
+  std::vector<int> local_data = input;
 
-  int local_n = n / proc_size;
+  SortLocalData(local_data);
 
   if (rank == 0) {
-    std::vector<std::vector<int>> all_parts(proc_size);
-    int idx = 0;
-    for (int i = 0; i < proc_size; ++i) {
-      int cnt = local_n + (i < n % proc_size ? 1 : 0);
-      all_parts[i].assign(input.begin() + idx, input.begin() + idx + cnt);
-      idx += cnt;
-    }
-
-    for (int i = 1; i < proc_size; ++i) {
-      MPI_Send(all_parts[i].data(), static_cast<int>(all_parts[i].size()), MPI_INT, i, 0, MPI_COMM_WORLD);
-    }
-
-    std::vector<int> local_data = all_parts[0];
-    SortLocalData(local_data);
-    all_parts[0] = local_data;
-
-    for (int i = 1; i < proc_size; ++i) {
-      int cnt = local_n + (i < n % proc_size ? 1 : 0);
-      std::vector<int> recv_data(cnt);
-      MPI_Recv(recv_data.data(), cnt, MPI_INT, i, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-      all_parts[i] = recv_data;
-    }
-
-    std::vector<int> result = all_parts[0];
-    for (int i = 1; i < proc_size; ++i) {
-      std::vector<int> merged;
-      merged.reserve(result.size() + all_parts[i].size());
-
-      size_t i1 = 0, i2 = 0;
-      while (i1 < result.size() && i2 < all_parts[i].size()) {
-        if (result[i1] <= all_parts[i][i2]) {
-          merged.push_back(result[i1++]);
-        } else {
-          merged.push_back(all_parts[i][i2++]);
-        }
-      }
-      while (i1 < result.size()) {
-        merged.push_back(result[i1++]);
-      }
-      while (i2 < all_parts[i].size()) {
-        merged.push_back(all_parts[i][i2++]);
-      }
-
-      result = std::move(merged);
-    }
-
-    GetOutput() = std::move(result);
-
-  } else {
-    int cnt = local_n + (rank < n % proc_size ? 1 : 0);
-    std::vector<int> local_data(cnt);
-    MPI_Recv(local_data.data(), cnt, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
-    SortLocalData(local_data);
-
-    MPI_Send(local_data.data(), static_cast<int>(local_data.size()), MPI_INT, 0, 1, MPI_COMM_WORLD);
+    GetOutput() = std::move(local_data);
   }
 
   return true;
