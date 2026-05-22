@@ -177,10 +177,12 @@ bool KrasnopevtsevaVHoareBatcherSortALL::RunImpl() {
   const auto &input = GetInput();
   int n = static_cast<int>(input.size());
 
-  if (proc_size == 1 || n <= 1000) {
+  if (proc_size == 1 || n <= 10000) {
     std::vector<int> result = input;
     SortLocalData(result);
-    GetOutput() = std::move(result);
+    if (rank == 0) {
+      GetOutput() = std::move(result);
+    }
     return true;
   }
 
@@ -197,26 +199,67 @@ bool KrasnopevtsevaVHoareBatcherSortALL::RunImpl() {
   int my_n = send_counts[rank];
   std::vector<int> local_data(my_n);
 
-  std::vector<int> temp_input;
   if (rank == 0) {
-    temp_input = input;
+    std::vector<int> temp_input = input;
+    MPI_Scatterv(temp_input.data(), send_counts.data(), displs.data(), MPI_INT, local_data.data(), my_n, MPI_INT, 0,
+                 MPI_COMM_WORLD);
   } else {
-    temp_input.resize(n);
+    // Для остальных процессов - только прием
+    MPI_Scatterv(nullptr, send_counts.data(), displs.data(), MPI_INT, local_data.data(), my_n, MPI_INT, 0,
+                 MPI_COMM_WORLD);
   }
-
-  MPI_Scatterv(temp_input.data(), send_counts.data(), displs.data(), MPI_INT, local_data.data(), my_n, MPI_INT, 0,
-               MPI_COMM_WORLD);
 
   SortLocalData(local_data);
 
-  std::vector<int> global_data(n);
+  std::vector<int> global_data;
+  if (rank == 0) {
+    global_data.resize(n);
+  }
 
   MPI_Gatherv(local_data.data(), my_n, MPI_INT, global_data.data(), send_counts.data(), displs.data(), MPI_INT, 0,
               MPI_COMM_WORLD);
 
   if (rank == 0) {
-    std::ranges::sort(global_data);
-    GetOutput() = std::move(global_data);
+    std::vector<std::vector<int>> parts;
+    parts.reserve(static_cast<size_t>(proc_size));
+
+    for (int i = 0; i < proc_size; ++i) {
+      int cnt = send_counts[i];
+      int start = displs[i];
+      if (cnt > 0 && start + cnt <= n) {
+        parts.emplace_back(global_data.begin() + start, global_data.begin() + start + cnt);
+      }
+    }
+
+    if (!parts.empty()) {
+      std::vector<int> result = std::move(parts[0]);
+      for (size_t i = 1; i < parts.size(); ++i) {
+        std::vector<int> merged;
+        merged.reserve(result.size() + parts[i].size());
+
+        size_t i1 = 0;
+        size_t i2 = 0;
+        while (i1 < result.size() && i2 < parts[i].size()) {
+          if (result[i1] <= parts[i][i2]) {
+            merged.push_back(result[i1]);
+            ++i1;
+          } else {
+            merged.push_back(parts[i][i2]);
+            ++i2;
+          }
+        }
+        while (i1 < result.size()) {
+          merged.push_back(result[i1]);
+          ++i1;
+        }
+        while (i2 < parts[i].size()) {
+          merged.push_back(parts[i][i2]);
+          ++i2;
+        }
+        result = std::move(merged);
+      }
+      GetOutput() = std::move(result);
+    }
   }
 
   return true;
