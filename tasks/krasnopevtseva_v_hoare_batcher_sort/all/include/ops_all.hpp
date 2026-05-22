@@ -19,31 +19,16 @@ class KrasnopevtsevaVHoareBatcherSortALL : public BaseTask {
   bool PreProcessingImpl() override;
   bool RunImpl() override;
   bool PostProcessingImpl() override;
-  struct Chunk {
-    int *ptr;
-    int size;
-    int left;
-    int right;
-  };
 
-  static int Partition(std::vector<int> &arr, int first, int last);
-  static void InsertionSort(std::vector<int> &arr, int first, int last);
-  static void QuickSort(std::vector<int> &arr, int first, int last);
-  static void BatcherMergeBlocksStep(int *left_pointer, int &left_size, int *right_pointer, int &right_size);
-  static void BatcherMerge(int thread_input_size, std::vector<int *> &pointers, std::vector<int> &sizes,
-                           int par_if_greater);
-  static void ParallelSortChunksOpenMP(std::vector<int> &res, int n, int numthreads);
-  static void MergeSortedVectors(std::vector<int> &result, const std::vector<int> &other);
+  std::vector<int> input_data_;
+  std::vector<int> output_data_;
 
-  static void ComputeDistribution(int n, int size, std::vector<int> &send_counts, std::vector<int> &displs);
-  static void ScatterData(const std::vector<int> &input, std::vector<int> &local_data, int rank, int size);
-  static void SortLocalData(std::vector<int> &local_data);
-  static void GatherData(std::vector<int> &local_data, std::vector<int> &global_data, int rank, int size, int n);
-  static void FinalMerge(std::vector<int> &global_data, const std::vector<int> &send_counts,
-                         const std::vector<int> &displs, int size);
-
-  int rank_ = 0;
-  int proc_size_ = 1;
-  bool mpi_initialized_ = false;
+  static void SplitPartition(std::vector<int> &arr, int &left, int &right, int &i, int &j);
+  static void ProcessPartition(std::vector<int> &arr, int &left, int &right, std::vector<std::pair<int, int>> &stack);
+  static void QuickSort(std::vector<int> &arr, int left, int right);
+  static void ParallelLocalSort(std::vector<int> &arr);
+  static void CompareAndSwapWithNeighbor(std::vector<int> &local_arr, int neighbor, bool keep_low_half);
+  static void BatcherExchangeStep(std::vector<int> &local_data, int rank, int world_size, int p_step, int k_step);
+  static void BatcherMerge(std::vector<int> &local_data, int rank, int world_size);
 };
 }  // namespace krasnopevtseva_v_hoare_batcher_sort
