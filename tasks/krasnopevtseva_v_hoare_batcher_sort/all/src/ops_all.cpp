@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <queue>
 #include <stack>
 #include <utility>
 #include <vector>
@@ -21,208 +22,190 @@ KrasnopevtsevaVHoareBatcherSortALL::KrasnopevtsevaVHoareBatcherSortALL(const InT
 }
 
 bool KrasnopevtsevaVHoareBatcherSortALL::ValidationImpl() {
-  return !GetInput().empty();
+  return true;
 }
 
 bool KrasnopevtsevaVHoareBatcherSortALL::PreProcessingImpl() {
-  input_data_ = GetInput();
   return true;
 }
 
 bool KrasnopevtsevaVHoareBatcherSortALL::PostProcessingImpl() {
-  int rank = 0;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  if (rank == 0) {
-    GetOutput() = output_data_;
-  }
   return true;
 }
 
 int KrasnopevtsevaVHoareBatcherSortALL::Partition(std::vector<int> &arr, int left, int right) {
-  int pivot = arr[left + (right - left) / 2];
-  int i = left;
-  int j = right;
-
-  while (i <= j) {
+  int pivot = arr[left + ((right - left) / 2)];
+  int i = left - 1;
+  int j = right + 1;
+  while (true) {
+    ++i;
     while (arr[i] < pivot) {
       ++i;
     }
+    --j;
     while (arr[j] > pivot) {
       --j;
     }
-    if (i <= j) {
-      std::swap(arr[i], arr[j]);
-      ++i;
-      --j;
+    if (i >= j) {
+      return j;
     }
-  }
-  return i;
-}
-
-void KrasnopevtsevaVHoareBatcherSortALL::InsertionSort(std::vector<int> &arr, int left, int right) {
-  for (int i = left + 1; i <= right; ++i) {
-    int key = arr[i];
-    int j = i - 1;
-    while (j >= left && arr[j] > key) {
-      arr[j + 1] = arr[j];
-      --j;
-    }
-    arr[j + 1] = key;
+    std::swap(arr[i], arr[j]);
   }
 }
 
-void KrasnopevtsevaVHoareBatcherSortALL::QuickSort(std::vector<int> &arr, int left, int right) {
+void KrasnopevtsevaVHoareBatcherSortALL::OddEvenMerge(std::vector<int> &arr, int left, int right) {
+  int n = right - left + 1;
+  for (int step = 1; step < n; step *= 2) {
+    for (int i = left; i + step <= right; i += step * 2) {
+      if (arr[i] > arr[i + step]) {
+        std::swap(arr[i], arr[i + step]);
+      }
+    }
+  }
+}
+
+void KrasnopevtsevaVHoareBatcherSortALL::SequentialSort(std::vector<int> &arr, int left, int right) {
   std::stack<std::pair<int, int>> stack;
   stack.emplace(left, right);
-
   while (!stack.empty()) {
     auto [l, r] = stack.top();
     stack.pop();
-
-    while (l < r) {
-      if (r - l < 16) {
-        InsertionSort(arr, l, r);
-        break;
-      }
-
-      int pivot_idx = Partition(arr, l, r);
-
-      if (pivot_idx - l < r - pivot_idx + 1) {
-        stack.emplace(pivot_idx, r);
-        r = pivot_idx - 1;
-      } else {
-        stack.emplace(l, pivot_idx - 1);
-        l = pivot_idx;
-      }
+    if (l >= r) {
+      continue;
     }
-  }
-}
-
-void KrasnopevtsevaVHoareBatcherSortALL::BatcherMergeBlocksStep(int *left_ptr, int &left_size, int *right_ptr,
-                                                                int &right_size) {
-  std::inplace_merge(left_ptr, right_ptr, right_ptr + right_size);
-  left_size += right_size;
-}
-
-void KrasnopevtsevaVHoareBatcherSortALL::BatcherMerge(std::vector<int *> &pointers, std::vector<int> &sizes) {
-  int pack = static_cast<int>(pointers.size());
-  for (int step = 1; pack > 1; step *= 2, pack /= 2) {
-#pragma omp parallel for default(none) shared(pointers, sizes, pack, step)
-    for (int off = 0; off < pack / 2; ++off) {
-      size_t idx1 = static_cast<size_t>(2 * step) * static_cast<size_t>(off);
-      size_t idx2 = idx1 + static_cast<size_t>(step);
-      BatcherMergeBlocksStep(pointers[idx1], sizes[idx1], pointers[idx2], sizes[idx2]);
+    int p = Partition(arr, l, r);
+    if ((p - l) > (r - p - 1)) {
+      stack.emplace(l, p);
+      stack.emplace(p + 1, r);
+    } else {
+      stack.emplace(p + 1, r);
+      stack.emplace(l, p);
     }
-    if ((pack / 2) - 1 == 0) {
-      BatcherMergeBlocksStep(pointers[0], sizes[sizes.size() - 1], pointers[pointers.size() - 1],
-                             sizes[sizes.size() - 1]);
-    } else if ((pack / 2) % 2 != 0) {
-      size_t idx1 = static_cast<size_t>(2 * step) * static_cast<size_t>((pack / 2) - 2);
-      size_t idx2 = static_cast<size_t>(2 * step) * static_cast<size_t>((pack / 2) - 1);
-      BatcherMergeBlocksStep(pointers[idx1], sizes[idx1], pointers[idx2], sizes[idx2]);
-    }
+    OddEvenMerge(arr, l, r);
   }
 }
 
-void KrasnopevtsevaVHoareBatcherSortALL::ParallelSortChunks(std::vector<int> &arr, int n, int num_threads) {
-  int chunk_size = n / num_threads;
-  int remainder = n % num_threads;
-
-  std::vector<int *> pointers(num_threads);
-  std::vector<int> sizes(num_threads);
-
-  int offset = 0;
-  for (int i = 0; i < num_threads; ++i) {
-    pointers[i] = arr.data() + offset;
-    sizes[i] = chunk_size + (i < remainder ? 1 : 0);
-    offset += sizes[i];
-  }
-
-#pragma omp parallel for default(none) shared(arr, pointers, sizes, num_threads)
-  for (int i = 0; i < num_threads; ++i) {
-    int left = static_cast<int>(pointers[i] - arr.data());
-    int right = left + sizes[i] - 1;
-    QuickSort(arr, left, right);
-  }
-
-  BatcherMerge(pointers, sizes);
-}
-
-void KrasnopevtsevaVHoareBatcherSortALL::ParallelLocalSort(std::vector<int> &arr) {
-  int n = static_cast<int>(arr.size());
-  if (n <= 1) {
+void KrasnopevtsevaVHoareBatcherSortALL::ParallelSortImpl(std::vector<int> &arr, int left, int right) {
+  if (left >= right) {
     return;
   }
-
-  int max_threads = omp_get_max_threads();
-  if (max_threads <= 0) {
-    max_threads = 1;
+  if (right - left < 1000) {
+    SequentialSort(arr, left, right);
+    return;
   }
+  int p = Partition(arr, left, right);
+  OddEvenMerge(arr, left, right);
+#pragma omp task default(none) shared(arr) firstprivate(left, p)
+  ParallelSortImpl(arr, left, p);
+#pragma omp task default(none) shared(arr) firstprivate(right, p)
+  ParallelSortImpl(arr, p + 1, right);
+#pragma omp taskwait
+}
 
-  int num_threads = std::min(max_threads, n);
-  num_threads = std::max(1, num_threads);
-
-  if (num_threads == 1 || n < 1000) {
-    QuickSort(arr, 0, n - 1);
-  } else {
-    ParallelSortChunks(arr, n, num_threads);
+void KrasnopevtsevaVHoareBatcherSortALL::BuildScatterLayout(int n, int comm_size, std::vector<int> &counts,
+                                                            std::vector<int> &displs) {
+  counts.resize(static_cast<size_t>(comm_size));
+  displs.resize(static_cast<size_t>(comm_size));
+  const int base = n / comm_size;
+  const int rem = n % comm_size;
+  int offset = 0;
+  for (int i = 0; i < comm_size; ++i) {
+    counts[static_cast<size_t>(i)] = base + (i < rem ? 1 : 0);
+    displs[static_cast<size_t>(i)] = offset;
+    offset += counts[static_cast<size_t>(i)];
   }
+}
+
+std::vector<int> KrasnopevtsevaVHoareBatcherSortALL::Merge(const std::vector<int> &gathered,
+                                                           const std::vector<int> &counts,
+                                                           const std::vector<int> &displs, int comm_size) {
+  struct Item {
+    int val;
+    int chunk;
+    int next_idx;
+  };
+  auto cmp = [](const Item &a, const Item &b) { return a.val > b.val; };
+  std::priority_queue<Item, std::vector<Item>, decltype(cmp)> pq(cmp);
+  for (int i = 0; i < comm_size; ++i) {
+    int cnt = counts[static_cast<size_t>(i)];
+    if (cnt <= 0) {
+      continue;
+    }
+    int dsp = displs[static_cast<size_t>(i)];
+    pq.push(Item{.val = gathered[static_cast<size_t>(dsp)], .chunk = i, .next_idx = 1});
+  }
+  std::vector<int> result;
+  result.reserve(gathered.size());
+  while (!pq.empty()) {
+    Item item = pq.top();
+    pq.pop();
+    result.push_back(item.val);
+    int cnt = counts[static_cast<size_t>(item.chunk)];
+    if (item.next_idx < cnt) {
+      int dsp = displs[static_cast<size_t>(item.chunk)];
+      size_t idx = static_cast<size_t>(dsp) + static_cast<size_t>(item.next_idx);
+      pq.push(Item{.val = gathered[idx], .chunk = item.chunk, .next_idx = item.next_idx + 1});
+    }
+  }
+  return result;
 }
 
 bool KrasnopevtsevaVHoareBatcherSortALL::RunImpl() {
   int rank = 0;
-  int world_size = 1;
-
+  int comm_size = 1;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+  MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
+  int n = 0;
+  std::vector<int> input_vector;
 
-  int total_n = (rank == 0) ? static_cast<int>(input_data_.size()) : 0;
-  MPI_Bcast(&total_n, 1, MPI_INT, 0, MPI_COMM_WORLD);
+  if (rank == 0) {
+    const auto &input = GetInput();
+    n = static_cast<int>(input.size());
+    input_vector = input;
+  }
 
-  if (total_n <= 1) {
+  MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+  if (n <= 1) {
     if (rank == 0) {
-      output_data_ = input_data_;
+      GetOutput() = input_vector;
     }
+    MPI_Barrier(MPI_COMM_WORLD);
     return true;
   }
 
-  if (world_size == 1 || total_n < 1000) {
-    std::vector<int> result = input_data_;
-    ParallelLocalSort(result);
-    if (rank == 0) {
-      output_data_ = std::move(result);
-    }
-    return true;
+  std::vector<int> counts;
+  std::vector<int> displs;
+  BuildScatterLayout(n, comm_size, counts, displs);
+
+  int local_n = counts[static_cast<size_t>(rank)];
+  std::vector<int> local_data(static_cast<size_t>(local_n));
+
+  const int *send_root = (rank == 0) ? input_vector.data() : nullptr;
+  MPI_Scatterv(send_root, counts.data(), displs.data(), MPI_INT, local_data.data(), local_n, MPI_INT, 0,
+               MPI_COMM_WORLD);
+
+  if (local_n > 1) {
+#pragma omp parallel default(none) shared(local_data, local_n)
+#pragma omp single
+    ParallelSortImpl(local_data, 0, local_n - 1);
   }
 
-  int chunk_size = (total_n + world_size - 1) / world_size;
-  int padded_size = chunk_size * world_size;
-
-  std::vector<int> local_data(static_cast<size_t>(chunk_size));
-  std::vector<int> send_buffer;
+  std::vector<int> gathered;
+  int *recv_root = nullptr;
+  if (rank == 0) {
+    gathered.resize(static_cast<size_t>(n));
+    recv_root = gathered.data();
+  }
+  MPI_Gatherv(local_data.data(), local_n, MPI_INT, recv_root, counts.data(), displs.data(), MPI_INT, 0, MPI_COMM_WORLD);
 
   if (rank == 0) {
-    send_buffer = input_data_;
-    send_buffer.resize(static_cast<size_t>(padded_size), std::numeric_limits<int>::max());
+    std::vector<int> result = Merge(gathered, counts, displs, comm_size);
+    std::sort(result.begin(), result.end());
+    GetOutput() = std::move(result);
   }
 
-  MPI_Scatter(send_buffer.data(), chunk_size, MPI_INT, local_data.data(), chunk_size, MPI_INT, 0, MPI_COMM_WORLD);
-
-  ParallelLocalSort(local_data);
-
-  std::vector<int> gather_buffer;
-  if (rank == 0) {
-    gather_buffer.resize(static_cast<size_t>(padded_size));
-  }
-
-  MPI_Gather(local_data.data(), chunk_size, MPI_INT, gather_buffer.data(), chunk_size, MPI_INT, 0, MPI_COMM_WORLD);
-
-  if (rank == 0) {
-    gather_buffer.resize(static_cast<size_t>(total_n));
-    std::sort(gather_buffer.begin(), gather_buffer.end());
-    output_data_ = std::move(gather_buffer);
-  }
-
+  MPI_Barrier(MPI_COMM_WORLD);
   return true;
 }
 
