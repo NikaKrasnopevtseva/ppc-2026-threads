@@ -72,18 +72,30 @@ void KrasnopevtsevaVHoareBatcherSortALL::InsertionSort(std::vector<int> &arr, in
 }
 
 void KrasnopevtsevaVHoareBatcherSortALL::QuickSort(std::vector<int> &arr, int left, int right) {
-  if (left >= right) {
-    return;
-  }
+  std::stack<std::pair<int, int>> stack;
+  stack.emplace(left, right);
 
-  if (right - left < 16) {
-    InsertionSort(arr, left, right);
-    return;
-  }
+  while (!stack.empty()) {
+    auto [l, r] = stack.top();
+    stack.pop();
 
-  int pivot_idx = Partition(arr, left, right);
-  QuickSort(arr, left, pivot_idx - 1);
-  QuickSort(arr, pivot_idx, right);
+    while (l < r) {
+      if (r - l < 16) {
+        InsertionSort(arr, l, r);
+        break;
+      }
+
+      int pivot_idx = Partition(arr, l, r);
+
+      if (pivot_idx - l < r - pivot_idx + 1) {
+        stack.emplace(pivot_idx, r);
+        r = pivot_idx - 1;
+      } else {
+        stack.emplace(l, pivot_idx - 1);
+        l = pivot_idx;
+      }
+    }
+  }
 }
 
 void KrasnopevtsevaVHoareBatcherSortALL::BatcherMergeBlocksStep(int *left_ptr, int &left_size, int *right_ptr,
@@ -150,7 +162,7 @@ void KrasnopevtsevaVHoareBatcherSortALL::ParallelLocalSort(std::vector<int> &arr
   int num_threads = std::min(max_threads, n);
   num_threads = std::max(1, num_threads);
 
-  if (num_threads == 1 || n < 10000) {
+  if (num_threads == 1 || n < 1000) {
     QuickSort(arr, 0, n - 1);
   } else {
     ParallelSortChunks(arr, n, num_threads);
@@ -174,7 +186,7 @@ bool KrasnopevtsevaVHoareBatcherSortALL::RunImpl() {
     return true;
   }
 
-  if (world_size == 1 || total_n < 10000) {
+  if (world_size == 1 || total_n < 1000) {
     std::vector<int> result = input_data_;
     ParallelLocalSort(result);
     if (rank == 0) {
