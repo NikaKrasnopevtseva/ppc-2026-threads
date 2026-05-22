@@ -20,15 +20,13 @@ class KrasnopevtsevaVHoareBatcherSortALL : public BaseTask {
   bool RunImpl() override;
   bool PostProcessingImpl() override;
 
-  static int Partition(std::vector<int> &arr, int left, int right);
-  static void OddEvenMerge(std::vector<int> &arr, int left, int right);
-  static void SequentialSort(std::vector<int> &arr, int left, int right);
-  static void ParallelSortImpl(std::vector<int> &arr, int left, int right);
-  static void BuildScatterLayout(int n, int comm_size, std::vector<int> &counts, std::vector<int> &displs);
-  static std::vector<int> Merge(const std::vector<int> &gathered, const std::vector<int> &counts,
-                                const std::vector<int> &displs, int comm_size);
-
-  std::vector<int> input_data_;
-  std::vector<int> output_data_;
+  static int Partition(std::vector<int> &arr, int first, int last);
+  static void InsertionSort(std::vector<int> &arr, int first, int last);
+  static void QuickSort(std::vector<int> &arr, int first, int last);
+  static void BatcherMergeBlocksStep(int *left_pointer, int &left_size, int *right_pointer, int &right_size);
+  static void BatcherMerge(int thread_input_size, std::vector<int *> &pointers, std::vector<int> &sizes,
+                           int par_if_greater);
+  static void ParallelSortChunksOpenMP(std::vector<int> &res, int n, int numthreads);
+  static void SortLocalData(std::vector<int> &data);
 };
 }  // namespace krasnopevtseva_v_hoare_batcher_sort
