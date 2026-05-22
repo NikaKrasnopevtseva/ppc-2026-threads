@@ -11,7 +11,6 @@
 #include "krasnopevtseva_v_hoare_batcher_sort/common/include/common.hpp"
 #include "krasnopevtseva_v_hoare_batcher_sort/omp/include/ops_omp.hpp"
 #include "krasnopevtseva_v_hoare_batcher_sort/seq/include/ops_seq.hpp"
-#include "krasnopevtseva_v_hoare_batcher_sort/all/include/ops_all.hpp"
 #include "util/include/func_test_util.hpp"
 #include "util/include/util.hpp"
 
